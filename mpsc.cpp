@@ -54,22 +54,23 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   do {
     local_offset = atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
-    std::atomic<std::size_t>* version_number_ptr2 = &version_numbers[version_idx];
+    std::atomic<std::size_t>* next_version_number_ptr = &version_numbers[version_idx];
+
     if constexpr (version_granularity < length) {
       /* This case is possible only when version granularity is coarse, in which case 
       we can prevent an extra global store by having two extra local branch predictions, 
       which is more efficient (less cache coherence).
       */
-      if (version_number_ptr && version_number_ptr2 != version_number_ptr) {
+      if (version_number_ptr && next_version_number_ptr != version_number_ptr) {
         version_number_ptr->fetch_sub(1, std::memory_order_relaxed);
-        version_number_ptr2->fetch_add(1, std::memory_order_release);
+        next_version_number_ptr->fetch_add(1, std::memory_order_release);
       } else if (!version_number_ptr) { 
-        version_number_ptr2->fetch_add(1, std::memory_order_release);
+        next_version_number_ptr->fetch_add(1, std::memory_order_release);
       }
-      version_number_ptr = version_number_ptr2;
+      version_number_ptr = next_version_number_ptr;
     } else {
-      version_number_ptr2->fetch_add(1, std::memory_order_release);
-      version_number_ptr = version_number_ptr2;
+      next_version_number_ptr->fetch_add(1, std::memory_order_release);
+      version_number_ptr = next_version_number_ptr;
     }
   } while (!atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
