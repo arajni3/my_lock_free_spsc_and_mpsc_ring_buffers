@@ -49,7 +49,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   */
 
   do {
-    if (version_number) { version_number_ptrfetch_sub(1, std::memory_order_relaxed); }
+    if (version_number_ptr) { version_number_ptrfetch_sub(1, std::memory_order_relaxed); }
     local_offset = atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
     version_number = &version_numbers[version_idx];
