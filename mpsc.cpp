@@ -49,11 +49,11 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   */
 
   do {
-    if (version_number_ptr) { version_number_ptrfetch_sub(1, std::memory_order_relaxed); }
+    if (version_number_ptr) { version_number_ptr->fetch_sub(1, std::memory_order_relaxed); }
     local_offset = atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
-    version_number = &version_numbers[version_idx];
-    version_number_ptrfetch_add(1, std::memory_order_release);
+    version_number_ptr = &version_numbers[version_idx];
+    version_number_ptr->fetch_add(1, std::memory_order_release);
   } while (!atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
     local_offset + 1, 
@@ -63,7 +63,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
 
   std::memcpy(&buf[local_offset], data, sizeof(DataType));
 
-  version_number_ptrfetch_sub(1, std::memory_order_release);
+  version_number_ptr->fetch_sub(1, std::memory_order_release);
 }
 
 template<typename DataType, unsigned length, unsigned version_granularity>
