@@ -17,7 +17,7 @@ struct RingBuf {
 
   struct alignas(ALIGN_NO_FALSE_SHARING) __version_alignment_wrapper {
     std::atomic<std::size_t> number;
-  }
+  };
   /* Version numbers for the ring buffer.
   
   For SP, a version number is odd if its region is 
