@@ -1,4 +1,5 @@
 #include <atomic>
+#include <cstring>
 
 /* Lock-free ring buffer with SPSC and MPSC implementations. Typically only a single 
 consumer exists. The writer is in fact wait-free in the SPSC case. The length and version 

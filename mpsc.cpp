@@ -1,5 +1,3 @@
-#include <atomic>
-#include <cstring>
 #include "ring_buf.hpp"
 
 template<typename DataType, unsigned length, unsigned version_granularity>
