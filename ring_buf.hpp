@@ -8,9 +8,6 @@ must divide length.
 */
 template<typename DataType, unsigned length, unsigned version_granularity = length>
 struct RingBuf {
-  constexpr unsigned length = length;
-  constexpr unsigned version_granularity = version_granularity;
-
   union {
     std::atomic<unsigned> atomic_global_write_offset; // for MPSC
     unsigned write_offset; // for SPSC
