@@ -37,23 +37,38 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   is so that sequential consistency is not needed to synchronize the store of the 
   global write offset with the stores of the version number. Retry is detected by setting 
   the initial value of the version number pointer to null, in which case it will be 
-  non-null only upon retry, in which case the version number must be subtracted. This 
-  will correctly synchronize with the reader because the reader will detect contention 
-  with a writer if and only if the version number is positive. The subtraction in the 
-  loop can be done with relaxed semantics because the CAS branch synchronizes it with the 
-  addition that took place in the previous loop iteration if contention was detected, and 
-  if the new loop iteration yields the same version number, then the later addition in the 
-  same loop iteration, which is done with release semantics, will synchronize with it 
+  non-null only upon retry, in which case the version number must be compared with the 
+  new version number pointer, and if they are not the same, then the old version 
+  number must be corrected (decremented by 1) and the new version number should be 
+  claimed (incremented by 1). This will correctly synchronize with the reader because the 
+  reader will detect contention with a writer if and only if the version number is positive.
+  The subtraction in the loop can be done with relaxed semantics because the CAS branch 
+  synchronizes it with the addition that took place in the previous loop iteration if 
+  the new version number location is different, and if the new loop iteration yields the 
+  same version number, then only version number store in the this loop iteration is the 
+  increment, which is done with release semantics and hence will synchronize with it 
   anyway; this release operation will then also synchronize with the later memcpy, and 
   likewise so will the final subtraction, which has release semantics.
   */
 
   do {
-    if (version_number_ptr) { version_number_ptr->fetch_sub(1, std::memory_order_relaxed); }
     local_offset = atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
-    version_number_ptr = &version_numbers[version_idx];
-    version_number_ptr->fetch_add(1, std::memory_order_release);
+    std::atomic<std::size_t>* version_number_ptr2 = &version_numbers[version_idx];
+    if constexpr (version_granularity < length) {
+      /* This case is possible only when version granularity is coarse, in which case 
+      we can prevent an extra global store by having an extra local branch prediction, 
+      which is more efficient (less cache coherence).
+      */
+      if (version_number_ptr && version_number_ptr2 != version_number_ptr) {
+        version_number_ptr->fetch_sub(1, std::memory_order_relaxed);
+        version_number_ptr2->fetch_add(1, std::memory_order_release);
+      }
+      version_number_ptr = version_number_ptr2;
+    } else {
+      version_number_ptr2->fetch_add(1, std::memory_order_release);
+      version_number_ptr = version_number_ptr2;
+    }
   } while (!atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
     local_offset + 1, 

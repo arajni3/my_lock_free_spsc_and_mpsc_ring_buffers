@@ -4,7 +4,7 @@
 /* Lock-free ring buffer with SPSC and MPSC implementations. Typically only a single 
 consumer exists. The writer is in fact wait-free in the SPSC case. The length and version 
 granularity must be powers of 2 to make modulo as fast as possible, and version_granularity
-must divide length.
+must divide length (i.e., be <= length).
 */
 template<typename DataType, unsigned length, unsigned version_granularity = length>
 struct RingBuf {
@@ -12,9 +12,6 @@ struct RingBuf {
     std::atomic<unsigned> atomic_global_write_offset; // for MPSC
     unsigned write_offset; // for SPSC
   };
-
-  // underlying buffer
-  DataType buf[length];
 
   /* Version numbers for the ring buffer.
   
@@ -25,9 +22,13 @@ struct RingBuf {
 
   For MP, a version number is 1 if its rewriter always adds to a version number to take control of it but subtracts when
   relinquishing control of the region to the reader. This is because a producer may have 
-  incremented the version number on a stale append region, so it must later correct it.
+  incremented the version number on a stale append region, so it must later correct it. 
+  Hence, in MP, a version number is actually a writer refcount.
   */
   std::atomic<std::size_t> version_numbers[version_granularity];
+
+  // underlying buffer
+  DataType buf[length];
   
   void write(DataType* data);
 
