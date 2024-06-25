@@ -1,18 +1,23 @@
 #include <atomic>
 #include <cstring>
+#define ALIGN_NO_FALSE_SHARING (64 * 2) // align to two cache lines because of prefetching
 
 /* Lock-free ring buffer with SPSC and MPSC implementations. Typically only a single 
 consumer exists. The writer is in fact wait-free in the SPSC case. The length and version 
 granularity must be powers of 2 to make modulo as fast as possible, and version_granularity
-must divide length (i.e., be <= length).
+must divide length (i.e., be <= length). Ideally, DataType should be aligned to avoid 
+false sharing.
 */
 template<typename DataType, unsigned length, unsigned version_granularity = length>
 struct RingBuf {
   union {
-    std::atomic<unsigned> atomic_global_write_offset; // for MPSC
-    unsigned write_offset; // for SPSC
+    alignas(ALIGN_NO_FALSE_SHARING) std::atomic<unsigned> atomic_global_write_offset; // for MPSC
+    alignas(ALIGN_NO_FALSE_SHARING) unsigned write_offset; // for SPSC
   };
 
+  struct alignas(ALIGN_NO_FALSE_SHARING) __version_alignment_wrapper {
+    std::atomic<std::size_t> number;
+  }
   /* Version numbers for the ring buffer.
   
   For SP, a version number is odd if its region is 
@@ -25,7 +30,8 @@ struct RingBuf {
   incremented the version number on a stale append region, so it must later correct it. 
   Hence, in MP, a version number is actually a writer refcount.
   */
-  std::atomic<std::size_t> version_numbers[version_granularity];
+  
+  __version_alignment_wrapper version_numbers[version_granularity];
 
   // underlying buffer
   DataType buf[length];

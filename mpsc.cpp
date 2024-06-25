@@ -4,7 +4,7 @@ template<typename DataType, unsigned length, unsigned version_granularity>
 RingBuf<DataType, length, version_granularity>::RingBuf() {
   atomic_global_write_offset.store(0, std::memory_order_relaxed);
   for (unsigned i = 0; i < version_granularity; ++i) {
-    version_numbers[i].store(0, std::memory_order_relaxed);
+    version_numbers[i].number.store(0, std::memory_order_relaxed);
   }
 }
 
@@ -54,7 +54,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   do {
     local_offset = atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
-    std::atomic<std::size_t>* next_version_number_ptr = &version_numbers[version_idx];
+    std::atomic<std::size_t>* next_version_number_ptr = &version_numbers[version_idx].number;
 
     if constexpr (version_granularity < length) {
       /* This case is possible only when version granularity is coarse, in which case 
@@ -87,7 +87,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
 template<typename DataType, unsigned length, unsigned version_granularity>
 unsigned RingBuf<DataType, length, version_granularity>::read(unsigned read_offset, DataType* ret_data) {
   const unsigned version_idx = read_offset & (version_granularity - 1);
-  std::atomic<std::size_t>& version_number = version_numbers[version_idx];
+  std::atomic<std::size_t>& version_number = version_numbers[version_idx].number;
 
   // need acquire semantics to synchronize with the memcpy (do first then check)
   do {
