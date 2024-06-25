@@ -42,12 +42,12 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   non-null only upon retry, in which case the version number must be subtracted. This 
   will correctly synchronize with the reader because the reader will detect contention 
   with a writer if and only if the version number is positive. The subtraction in the 
-  loop can be done with relaxed semantics because there is nothing to synchronize with 
-  if contention was detected, and if the new loop iteration yields the same version 
-  number, then the later addition in the same loop iteration, which is done with 
-  release semantics, will synchronize with it anyway; this release operation will then 
-  also synchronize with the later memcpy, and likewise so will the final subtraction, 
-  which has release semantics.
+  loop can be done with relaxed semantics because the CAS branch synchronizes it with the 
+  addition that took place in the previous loop iteration if contention was detected, and 
+  if the new loop iteration yields the same version number, then the later addition in the 
+  same loop iteration, which is done with release semantics, will synchronize with it 
+  anyway; this release operation will then also synchronize with the later memcpy, and 
+  likewise so will the final subtraction, which has release semantics.
   */
 
   do {
