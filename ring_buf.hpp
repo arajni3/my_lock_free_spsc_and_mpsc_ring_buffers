@@ -1,8 +1,9 @@
 #include <atomic>
 
 /* Lock-free ring buffer with SPSC and MPSC implementations. Typically only a single 
-consumer exists. The length and version granularity must be powers of 2 to make modulo as 
-fast as possible, and version_granularity must divide length.
+consumer exists. The writer is in fact wait-free in the SPSC case. The length and version 
+granularity must be powers of 2 to make modulo as fast as possible, and version_granularity
+must divide length.
 */
 template<typename DataType, unsigned length, unsigned version_granularity = length>
 struct RingBuf {
