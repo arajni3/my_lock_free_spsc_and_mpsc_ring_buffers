@@ -36,7 +36,8 @@ struct RingBuf {
 
   /* Returns the new read offset. For a single consumer, 
   the reader will trivially start at 0 and will increment its read offset after each 
-  successful read.
+  successful read by setting it to the output of this function. Returning the new offset 
+  simply copies less bytes (4 versus 8 on 64-bit systems), so it is more efficient.
   */
   unsigned read(unsigned read_offset, DataType* ret_data);
 
