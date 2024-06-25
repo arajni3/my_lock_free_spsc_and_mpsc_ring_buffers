@@ -57,11 +57,13 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
     std::atomic<std::size_t>* version_number_ptr2 = &version_numbers[version_idx];
     if constexpr (version_granularity < length) {
       /* This case is possible only when version granularity is coarse, in which case 
-      we can prevent an extra global store by having an extra local branch prediction, 
+      we can prevent an extra global store by having two extra local branch predictions, 
       which is more efficient (less cache coherence).
       */
       if (version_number_ptr && version_number_ptr2 != version_number_ptr) {
         version_number_ptr->fetch_sub(1, std::memory_order_relaxed);
+        version_number_ptr2->fetch_add(1, std::memory_order_release);
+      } else if (!version_number_ptr) { 
         version_number_ptr2->fetch_add(1, std::memory_order_release);
       }
       version_number_ptr = version_number_ptr2;
