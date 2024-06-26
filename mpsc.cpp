@@ -13,6 +13,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   unsigned local_offset;
   unsigned version_idx;
   std::atomic<std::size_t>* version_number_ptr = nullptr;
+  volatile std::size_t write_guard = 0;
 
   /* Description: We want to try to write to the current offset if there is no 
   contention with another writer, i.e., if the global write offset ends up being the same 
@@ -41,14 +42,15 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   new version number pointer, and if they are not the same, then the old version 
   number must be corrected (decremented by 1) and the new version number should be 
   claimed (incremented by 1). This will correctly synchronize with the reader because the 
-  reader will detect contention with a writer if and only if the version number is positive.
-  The subtraction in the loop can be done with relaxed semantics because the CAS branch 
-  synchronizes it with the addition that took place in the previous loop iteration if 
-  the new version number location is different, and if the new loop iteration yields the 
+  reader will detect contention with a writer if and only if the version number is positive, 
+  and the increment is done with relaxed semantics for efficiency but the producer memcpy 
+  is protected by an explicit, volatile dependency on said increment hence synchronizes with 
+  the increment. The subtraction in the loop can be done with relaxed semantics because the 
+  CAS branch synchronizes it with the addition that took place in the previous loop iteration 
+  if the new version number location is different, and if the new loop iteration yields the 
   same version number, then only version number store in the this loop iteration is the 
-  increment, which is done with release semantics and hence will synchronize with it 
-  anyway; this release operation will then also synchronize with the later memcpy, and 
-  likewise so will the final subtraction, which has release semantics.
+  increment; this release operation will then also synchronize with the later memcpy as 
+  described previously, and so will the final subtraction, which has release semantics.
   */
 
   do {
@@ -63,13 +65,13 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
       */
       if (version_number_ptr && next_version_number_ptr != version_number_ptr) {
         version_number_ptr->fetch_sub(1, std::memory_order_relaxed);
-        next_version_number_ptr->fetch_add(1, std::memory_order_release);
+        write_guard = next_version_number_ptr->fetch_add(1, std::memory_order_relaxed);
       } else if (!version_number_ptr) { 
-        next_version_number_ptr->fetch_add(1, std::memory_order_release);
+        write_guard = next_version_number_ptr->fetch_add(1, std::memory_order_relaxed);
       }
       version_number_ptr = next_version_number_ptr;
     } else {
-      next_version_number_ptr->fetch_add(1, std::memory_order_release);
+      write_guard = next_version_number_ptr->fetch_add(1, std::memory_order_relaxed);
       version_number_ptr = next_version_number_ptr;
     }
   } while (!atomic_global_write_offset.compare_exchange_weak(
@@ -79,7 +81,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
     std::memory_order_relaxed
   ));
 
-  std::memcpy(&buf[local_offset], data, sizeof(DataType));
+  if (write_guard) { std::memcpy(&buf[local_offset], data, sizeof(DataType)); }
 
   version_number_ptr->fetch_sub(1, std::memory_order_release);
 }

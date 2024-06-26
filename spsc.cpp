@@ -14,13 +14,15 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   std::atomic<std::size_t>& version_number = version_numbers[version_idx].number;
 
 
-  /* need release semantics for each version number store to synchronize memcpy with it 
-  (not needed for write offset)
+  /* Need release semantics for the second version number store to synchronize memcpy with it 
+  (not needed for write offset). Need an explicit dependency of the memcpy on the first 
+  version number store to synchronize it with the latter; otherwise, the latter can be 
+  done with relaxed semantics.
   */
 
-  version_number.fetch_add(1, std::memory_order_release);
+  volatile std::size_t write_guard = version_number.fetch_add(1, std::memory_order_relaxed);
 
-  std::memcpy(&buf[write_offset], data, sizeof(DataType));
+  if (write_guard) { std::memcpy(&buf[write_offset], data, sizeof(DataType)); }
   write_offset = (write_offset + 1) & (length - 1);
   
   version_number.fetch_add(1, std::memory_order_release);
