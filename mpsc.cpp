@@ -76,7 +76,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
     }
   } while (!atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
-    local_offset + 1, 
+    (local_offset + 1) & length, 
     std::memory_order_release,
     std::memory_order_relaxed
   ));
