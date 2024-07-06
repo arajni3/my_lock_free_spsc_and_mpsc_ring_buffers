@@ -51,10 +51,10 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   
   The subtraction in the loop can be done with relaxed semantics because the 
   CAS branch synchronizes it with the addition that took place in the previous loop iteration 
-  if the new version number location is different, and if the new loop iteration yields the 
-  same version number, then the only version number store in the this loop iteration is the 
-  increment; this release operation will then also synchronize with the later memcpy as 
-  described previously, and so will the final subtraction, which has release semantics.
+  if the new version number location is different; if the new loop iteration yields the 
+  same version number, then there is no change in the value of the version number on this loop 
+  iteration, and on the very first loop iteration, the only version number operation is the single 
+  (relaxed) increment, which is thread-safe as explained above.
   */
 
   do {
@@ -64,7 +64,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
 
     if constexpr (version_granularity < length) 
     /* This case is possible only when version granularity is coarse, in which case 
-    we can prevent an extra global store by having two extra local branch predictions, 
+    we can prevent an extra global store by having one extra local branch prediction, 
     which is more efficient (less cache coherence).
     */
     {
@@ -76,6 +76,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
       }
       version_number_ptr = next_version_number_ptr;
     } else {
+      if (version_number_ptr) { version_number_ptr->fetch_sub(1, std::memory_order_relaxed); }
       write_guard = next_version_number_ptr->fetch_add(1, std::memory_order_relaxed);
       version_number_ptr = next_version_number_ptr;
     }
