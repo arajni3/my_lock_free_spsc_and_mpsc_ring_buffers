@@ -1,3 +1,4 @@
+#pragma once
 #include <atomic>
 #include <cstring>
 #define ALIGN_NO_FALSE_SHARING (64 * 2) // align to two cache lines because of prefetching
