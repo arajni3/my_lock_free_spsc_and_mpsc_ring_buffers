@@ -6,14 +6,16 @@ RingBuf<DataType, length, version_granularity>::RingBuf() {
   for (unsigned i = 0; i < version_granularity; ++i) {
     version_numbers[i].number.store(0, std::memory_order_relaxed);
   }
+  versioned_DataType start{ .sequence_number = 0 };
+  std::fill(buf, buf + length, start);
 }
 
 template<typename DataType, unsigned length, unsigned version_granularity>
 void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
-  unsigned local_offset;
+  uint64_t local_offset;
   unsigned version_idx;
-  std::atomic<std::size_t>* version_number_ptr = nullptr;
-  volatile std::size_t write_guard = 0;
+  std::atomic<uint64_t>* version_number_ptr = nullptr;
+  volatile uint64_t write_guard = 0;
 
   /* Description: We want to try to write to the current offset if there is no 
   contention with another writer, i.e., if the global write offset ends up being the same 
@@ -65,7 +67,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   do {
     local_offset = prod_u.atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
-    std::atomic<std::size_t>* next_version_number_ptr = &version_numbers[version_idx].number;
+    std::atomic<uint64_t>* next_version_number_ptr = &version_numbers[version_idx].number;
 
     if (next_version_number_ptr != version_number_ptr) {
       if (version_number_ptr) { version_number_ptr->fetch_sub(1, std::memory_order_relaxed); }
@@ -74,24 +76,27 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
     }
   } while (!prod_u.atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
-    (local_offset + 1) & (length - 1), 
+    local_offset + 1, 
     std::memory_order_release,
     std::memory_order_relaxed
   ));
 
-  if (write_guard) { std::memcpy(&buf[local_offset], data, sizeof(DataType)); }
+  versioned_DataType entry{*data, local_offset + 1}; // first written sequence number is 1
+  if (write_guard) { std::memcpy(&buf[(local_offset) & (length - 1)], &entry, sizeof(versioned_DataType)); }
 
   version_number_ptr->fetch_sub(1, std::memory_order_release);
 }
 
 template<typename DataType, unsigned length, unsigned version_granularity>
-unsigned RingBuf<DataType, length, version_granularity>::read(unsigned read_offset, DataType* ret_data) {
+uint64_t RingBuf<DataType, length, version_granularity>::read(uint64_t read_offset, DataType* ret_data) {
   const unsigned version_idx = read_offset & (version_granularity - 1);
-  std::atomic<std::size_t>& version_number = version_numbers[version_idx].number;
+  std::atomic<uint64_t>& version_number = version_numbers[version_idx].number;
 
   // need acquire semantics to synchronize with the memcpy (do first then check)
+  versioned_DataType entry;
   do {
-    std::memcpy(ret_data, &buf[read_offset], sizeof(DataType));
+    std::memcpy(&entry, &buf[(read_offset) & (length - 1)], sizeof(versioned_DataType));
   } while (version_number.load(std::memory_order_acquire));
-  return (read_offset + 1) & (length - 1);
+  unsigned char success = (uint64_t)(read_offset - entry.sequence_number) >> 63; // success iff sequence number > read offset
+  return read_offset + success;
 }
