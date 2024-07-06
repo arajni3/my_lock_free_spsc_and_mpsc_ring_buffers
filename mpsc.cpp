@@ -53,7 +53,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   relaxed semantics for efficiency but the producer memcpy is protected by an explicit, volatile 
   dependency on said increment hence synchronizes with the increment. 
   
-  if the new version number location is different, then a subsequent subtraction of the old version 
+  If the new version number location is different, then a subsequent subtraction of the old version 
   number is required; this subtraction can be done with relaxed semantics because the CAS branch 
   synchronizes it with the addition that took place in the previous loop iteration due to the subsequent 
   local offset load being dependent on the CAS branch as described above. If the new loop iteration 
