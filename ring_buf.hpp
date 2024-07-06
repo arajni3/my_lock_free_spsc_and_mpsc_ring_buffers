@@ -36,19 +36,22 @@ struct RingBuf {
   incremented the version number on a stale append region, so it must later correct it. 
   Hence, in MP, a version number is actually a writer refcount.
   */
-  
   __version_alignment_wrapper version_numbers[version_granularity];
 
   // underlying buffer
   DataType buf[length];
   
+  /* For writes, it is not expected that so many writes will occur without any reads 
+  in-between that unread entries will be overwritten, so, for efficiency, overflow is not checked.
+  */
   void write(DataType* data);
 
   /* Returns the new read offset. For a single consumer, 
   the reader will trivially start at 0 and will increment its read offset after each 
   successful read by setting it to the output of this function; it is not expected that so many 
   writes will occur without any reads in-between that unread entries will be overwritten, so, for 
-  efficiency, overflow is not checked. Returning the new offset 
+  efficiency, overflow is not checked. Additionally, it is not expected that superfluous reads 
+  will be done, so reading unwritten or already-read entries is not checked either. Returning the new offset 
   simply copies less bytes (4 versus 8 on 64-bit systems), so it is more efficient.
   */
   unsigned read(unsigned read_offset, DataType* ret_data);
