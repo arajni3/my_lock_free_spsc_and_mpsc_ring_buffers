@@ -5,15 +5,20 @@
 /* Lock-free ring buffer with SPSC and MPSC implementations. Typically only a single 
 consumer exists. The writer is in fact wait-free in the SPSC case. The length and version 
 granularity must be powers of 2 to make modulo as fast as possible, and version_granularity
-must divide length (i.e., be <= length). Ideally, DataType should be aligned to avoid 
-false sharing.
+must divide length (i.e., be <= length). Finally, DataType should be aligned to ALIGN_NO_FALSE_SHARING 
+bits to avoid false sharing.
 */
 template<typename DataType, unsigned length, unsigned version_granularity = length>
 struct RingBuf {
+  static_assert(length && !(length & (length - 1)), "length must be a power of 2");
+  static_assert(version_granularity && !(version_granularity & (version_granularity - 1)), "version granularity must be a power of 2");
+  static_assert(!(length & (version_granularity - 1)), "version granularity must divide length");
+  static_assert(!(alignof(DataType) & (ALIGN_NO_FALSE_SHARING - 1)), "DataType should be aligned to at least 128 bits avoid false sharing");
+
   union {
     alignas(ALIGN_NO_FALSE_SHARING) std::atomic<unsigned> atomic_global_write_offset; // for MPSC
     alignas(ALIGN_NO_FALSE_SHARING) unsigned write_offset; // for SPSC
-  };
+  } prod_u;
 
   struct alignas(ALIGN_NO_FALSE_SHARING) __version_alignment_wrapper {
     std::atomic<std::size_t> number;

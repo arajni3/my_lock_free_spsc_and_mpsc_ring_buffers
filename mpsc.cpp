@@ -2,7 +2,7 @@
 
 template<typename DataType, unsigned length, unsigned version_granularity>
 RingBuf<DataType, length, version_granularity>::RingBuf() {
-  atomic_global_write_offset.store(0, std::memory_order_relaxed);
+  prod_u.atomic_global_write_offset.store(0, std::memory_order_relaxed);
   for (unsigned i = 0; i < version_granularity; ++i) {
     version_numbers[i].number.store(0, std::memory_order_relaxed);
   }
@@ -63,7 +63,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   */
 
   do {
-    local_offset = atomic_global_write_offset.load(std::memory_order_relaxed);
+    local_offset = prod_u.atomic_global_write_offset.load(std::memory_order_relaxed);
     version_idx = local_offset & (version_granularity - 1);
     std::atomic<std::size_t>* next_version_number_ptr = &version_numbers[version_idx].number;
 
@@ -72,7 +72,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
       write_guard = next_version_number_ptr->fetch_add(1, std::memory_order_relaxed);
     }
     version_number_ptr = next_version_number_ptr;
-  } while (!atomic_global_write_offset.compare_exchange_weak(
+  } while (!prod_u.atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
     (local_offset + 1) & (length - 1), 
     std::memory_order_release,

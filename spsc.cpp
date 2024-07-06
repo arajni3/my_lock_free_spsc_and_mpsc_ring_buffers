@@ -2,7 +2,7 @@
 
 template<typename DataType, unsigned length, unsigned version_granularity>
 RingBuf<DataType, length, version_granularity>::RingBuf() {
-  write_offset = 0;
+  prod_u.write_offset = 0;
   for (unsigned i = 0; i < version_granularity; ++i) {
     version_numbers[i].number.store(0, std::memory_order_relaxed);
   }
@@ -10,7 +10,7 @@ RingBuf<DataType, length, version_granularity>::RingBuf() {
 
 template<typename DataType, unsigned length, unsigned version_granularity>
 void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
-  const unsigned version_idx = write_offset & (version_granularity - 1);
+  const unsigned version_idx = prod_u.write_offset & (version_granularity - 1);
   std::atomic<std::size_t>& version_number = version_numbers[version_idx].number;
 
 
@@ -22,8 +22,8 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
 
   volatile std::size_t write_guard = version_number.fetch_add(1, std::memory_order_relaxed);
 
-  if (write_guard) { std::memcpy(&buf[write_offset], data, sizeof(DataType)); }
-  write_offset = (write_offset + 1) & (length - 1);
+  if (write_guard) { std::memcpy(&buf[prod_u.write_offset], data, sizeof(DataType)); }
+  prod_u.write_offset = (prod_u.write_offset + 1) & (length - 1);
   
   version_number.fetch_add(1, std::memory_order_release);
 }
