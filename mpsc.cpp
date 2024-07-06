@@ -30,7 +30,11 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   be greater than the loaded local offset, and we have to try again. We fail with relaxed 
   semantics because no store happened, hence no synchronization is needed with the 
   prior load of the same atomic. The later memcpy is already synchronized because it 
-  explicitly depends on the local offset value, which will be recomputed.
+  explicitly depends on the local offset value, which will be recomputed. The atomic 
+  offset in the loop iteration can be done with relaxed semantics because the CAS 
+  operation in the branch explicitly depends on the local offset hence synchronizes with the very 
+  first iteration and trivially synchronizes with future iterations because future iterations fall 
+  under the branch.
 
     
 
@@ -49,10 +53,11 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   relaxed semantics for efficiency but the producer memcpy is protected by an explicit, volatile 
   dependency on said increment hence synchronizes with the increment. 
   
-  The subtraction in the loop can be done with relaxed semantics because the 
-  CAS branch synchronizes it with the addition that took place in the previous loop iteration 
-  if the new version number location is different; if the new loop iteration yields the 
-  same version number, then there is no change in the value of the version number on this loop 
+  if the new version number location is different, then a subsequent subtraction of the old version 
+  number is required; this subtraction can be done with relaxed semantics because the CAS branch 
+  synchronizes it with the addition that took place in the previous loop iteration due to the subsequent 
+  local offset load being dependent on the CAS branch as described above. If the new loop iteration 
+  yields the same version number, then there is no change in the value of the version number on this loop 
   iteration, and on the very first loop iteration, the only version number operation is the single 
   (relaxed) increment, which is thread-safe as explained above.
   */
