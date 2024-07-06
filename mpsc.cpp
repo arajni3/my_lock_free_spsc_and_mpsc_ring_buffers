@@ -36,19 +36,25 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
 
   The version number increment is done (possibly repeatedly) in the CAS loop. This 
   is so that sequential consistency is not needed to synchronize the store of the 
-  global write offset with the stores of the version number. Retry is detected by setting 
+  global write offset with the stores of the version number. 
+  
+  Retry is detected by setting 
   the initial value of the version number pointer to null, in which case it will be 
   non-null only upon retry, in which case the version number must be compared with the 
   new version number pointer, and if they are not the same, then the old version 
   number must be corrected (decremented by 1) and the new version number should be 
-  claimed (incremented by 1). This will correctly synchronize with the reader because the 
+  claimed (incremented by 1). 
+  
+  This will correctly synchronize with the reader because the 
   reader will detect contention with a writer if and only if the version number is positive, 
   and the increment is done with relaxed semantics for efficiency but the producer memcpy 
   is protected by an explicit, volatile dependency on said increment hence synchronizes with 
-  the increment. The subtraction in the loop can be done with relaxed semantics because the 
+  the increment. 
+  
+  The subtraction in the loop can be done with relaxed semantics because the 
   CAS branch synchronizes it with the addition that took place in the previous loop iteration 
   if the new version number location is different, and if the new loop iteration yields the 
-  same version number, then only version number store in the this loop iteration is the 
+  same version number, then the only version number store in the this loop iteration is the 
   increment; this release operation will then also synchronize with the later memcpy as 
   described previously, and so will the final subtraction, which has release semantics.
   */
