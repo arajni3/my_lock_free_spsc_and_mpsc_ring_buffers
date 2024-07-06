@@ -19,11 +19,13 @@ struct RingBuf {
   static_assert(!(length & (version_granularity - 1)), "version granularity must divide length");
   static_assert(std::is_trivially_copyable_v<DataType>, "DataType must be POD (to support memcpy)");
 
-  union // the write offset member is not automatically wrapped because it also serves as a global sequence number to detect unwritten/stale entries
+  union // union members are not automatically wrapped because each is needed to detect unwritten/stale entries for MPSC or SPSC
   {
-    alignas(ALIGN_NO_FALSE_SHARING) std::atomic<uint64_t> atomic_global_write_offset; // for MPSC
-    alignas(ALIGN_NO_FALSE_SHARING) uint64_t write_offset; // for SPSC
+    alignas(ALIGN_NO_FALSE_SHARING) std::atomic<uint64_t> atomic_global_write_sequence_number; // for MPSC
+    alignas(ALIGN_NO_FALSE_SHARING) uint64_t write_sequence_number; // for SPSC
   } prod_u;
+
+  uint64_t read_sequence_number; // not automatically wrapped, see the description of read()
 
   struct alignas(ALIGN_NO_FALSE_SHARING) __version_alignment_wrapper {
     std::atomic<uint64_t> number;
@@ -69,16 +71,14 @@ struct RingBuf {
   */
   void write(DataType* data);
 
-  /* Returns the new read sequence number (not wrapped). For a single consumer, 
-  the reader will trivially start at 0 and will increment its read sequence number after each 
-  successful read by setting it to the output of this function; it is not expected that so many 
-  writes will occur without any reads in-between that unread entries will be overwritten, so, for 
-  efficiency, overflow is not checked. If the current entry to read was not written or is stale (i.e., 
-  if the entry's sequence number is not greater than the input sequence number (sequence numbers in 
-  the ring buffer are 0 by default but written ones start at 1)), then the returned number is the same 
-  as the input one.
+  /* For a single consumer, the reader will trivially start at 0 and will the read sequence number will
+  increment by 1 after each successful read; it is not expected that so many writes will occur without any reads 
+  in-between that unread entries will be overwritten, so, for efficiency, overflow is not checked. If the 
+  current entry to read was not written or is stale (i.e., if the entry's sequence number is not greater than 
+  the read sequence number (sequence numbers in the ring buffer are 0 by default but written ones start at 1)), 
+  then the end read number is the same as the input one.
   */
-  uint64_t read(uint64_t read_offset, DataType* ret_data);
+  void read(DataType* ret_data);
 
   RingBuf();
 };
