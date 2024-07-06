@@ -70,8 +70,8 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
     if (next_version_number_ptr != version_number_ptr) {
       if (version_number_ptr) { version_number_ptr->fetch_sub(1, std::memory_order_relaxed); }
       write_guard = next_version_number_ptr->fetch_add(1, std::memory_order_relaxed);
+      version_number_ptr = next_version_number_ptr;
     }
-    version_number_ptr = next_version_number_ptr;
   } while (!prod_u.atomic_global_write_offset.compare_exchange_weak(
     local_offset, 
     (local_offset + 1) & (length - 1), 
