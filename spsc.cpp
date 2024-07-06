@@ -37,5 +37,5 @@ unsigned RingBuf<DataType, length, version_granularity>::read(unsigned read_offs
   do {
     std::memcpy(ret_data, &buf[read_offset], sizeof(DataType));
   } while (version_number.load(std::memory_order_acquire) & 1);
-  return read_offset;
+  return (read_offset + 1) & (length - 1);
 }
