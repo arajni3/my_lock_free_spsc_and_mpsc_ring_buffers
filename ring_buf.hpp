@@ -71,14 +71,15 @@ struct RingBuf {
   */
   void write(DataType* data);
 
-  /* For a single consumer, the reader will trivially start at 0 and will the read sequence number will
+  /* Returns whether the read was successful (no stale or unwritten data read).
+  For a single consumer, the reader will trivially start at 0 and will the read sequence number will
   increment by 1 after each successful read; it is not expected that so many writes will occur without any reads 
   in-between that unread entries will be overwritten, so, for efficiency, overflow is not checked. If the 
   current entry to read was not written or is stale (i.e., if the entry's sequence number is not greater than 
   the read sequence number (sequence numbers in the ring buffer are 0 by default but written ones start at 1)), 
   then the end read number is the same as the input one.
   */
-  void read(DataType* ret_data);
+  bool read(DataType* ret_data);
 
   RingBuf();
 };
