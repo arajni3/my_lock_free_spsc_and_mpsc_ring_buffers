@@ -24,8 +24,9 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   volatile uint64_t write_guard = version_number.fetch_add(1, std::memory_order_relaxed);
 
 
+  const uint64_t write_offset = prod_u.write_offset;
   versioned_DataType entry{*data, ++prod_u.write_offset}; // first written sequence number is 1
-  if (write_guard) { std::memcpy(&buf[(prod_u.write_offset) & (length - 1)], &entry, sizeof(versioned_DataType)); }
+  if (write_guard) { std::memcpy(&buf[write_offset & (length - 1)], &entry, sizeof(versioned_DataType)); }
   
   version_number.fetch_add(1, std::memory_order_release);
 }
@@ -38,7 +39,7 @@ uint64_t RingBuf<DataType, length, version_granularity>::read(uint64_t read_offs
   // need acquire semantics to synchronize with the memcpy (do first then check)
   versioned_DataType entry;
   do {
-    std::memcpy(&entry, &buf[(read_offset) & (length - 1)], sizeof(versioned_DataType));
+    std::memcpy(&entry, &buf[read_offset & (length - 1)], sizeof(versioned_DataType));
   } while (version_number.load(std::memory_order_acquire) & 1);
   unsigned char success = (uint64_t)(read_offset - entry.sequence_number) >> 63; // success iff sequence number > read offset
   return read_offset + success;
