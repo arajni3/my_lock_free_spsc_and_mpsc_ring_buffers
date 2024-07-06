@@ -42,7 +42,8 @@ bool RingBuf<DataType, length, version_granularity>::read(DataType* ret_data) {
   do {
     std::memcpy(&entry, &buf[read_sequence_number & (length - 1)], sizeof(versioned_DataType));
   } while (version_number.load(std::memory_order_acquire) & 1);
-  std::memcpy(ret_data, &entry.data, sizeof(DataType));
+  
+  std::memcpy(ret_data, &entry.data, sizeof(DataType)); // copy to client regardless of success to avoid branch predictions
   unsigned char success = (uint64_t)(read_sequence_number - entry.sequence_number) >> 63; // success iff sequence number > read offset
   read_sequence_number += success;
   return success;
