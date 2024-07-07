@@ -44,7 +44,7 @@ bool RingBuf<DataType, length, version_granularity>::read(DataType* ret_data) {
   } while (version_number.load(std::memory_order_acquire) & 1);
 
   unsigned char success = (uint64_t)(read_sequence_number - entry.sequence_number) >> 63; // success iff sequence number > read sequence number
-  if (success) { std::memcpy(ret_data, &entry.data, sizeof(DataType)); } // DataType may be large, e.g., a whole network packet
+  if (success) { std::memcpy(ret_data, &entry.data, sizeof(DataType)); } // conditional since DataType may be large, e.g., a whole network packet
   read_sequence_number += success;
   return success;
 }
