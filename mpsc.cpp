@@ -24,10 +24,11 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
 
 
     (1) If this is the case, the global write sequence number will be 
-  incremented by 1 for the next writer. We do that with release semantics so that the 
-  store is synchronized with the prior load of the same atomic (which can be 
-  relaxed because it cannot occur after the release operation). The later memcpy 
-  is already synchronized because it explicitly depends on the local sequence number value.
+  incremented by 1 for the next writer. We do that with relaxed semantics, which is fine since the 
+  CAS operation explicitly depends on the local offset load hence synchronizes with it, and the 
+  version number does not need to synchronize with the CAS operation, only with the memcpy 
+  and final version number decrement as described below. The later memcpy is already synchronized 
+  because it explicitly depends on the local sequence number value.
 
     (2) Otherwise, the global write sequence number will in fact 
   be greater than the loaded local sequence number, and we have to try again. We fail with relaxed 
@@ -78,7 +79,7 @@ void RingBuf<DataType, length, version_granularity>::write(DataType* data) {
   } while (!prod_u.atomic_global_write_sequence_number.compare_exchange_weak(
     local_sequence_number, 
     local_sequence_number + 1, 
-    std::memory_order_release,
+    std::memory_order_relaxed,
     std::memory_order_relaxed
   ));
 
@@ -93,11 +94,13 @@ bool RingBuf<DataType, length, version_granularity>::read(DataType* ret_data) {
   const unsigned version_idx = read_sequence_number & (version_granularity - 1);
   std::atomic<uint64_t>& version_number = version_numbers[version_idx].number;
 
-  // need acquire semantics to synchronize with the memcpy (do first then check)
   versioned_DataType entry;
+  // need store and load fences to synchronize check with the memcpy (do first then check; memcpy before store fence and check after load fence)
   do {
     std::memcpy(&entry, &buf[read_sequence_number & (length - 1)], sizeof(versioned_DataType));
-  } while (version_number.load(std::memory_order_acquire));
+    std::atomic_thread_fence(std::memory_order_release);
+    std::atomic_thread_fence(std::memory_order_acquire);
+  } while (version_number.load(std::memory_order_relaxed));
 
   unsigned char success = (uint64_t)(read_sequence_number - entry.sequence_number) >> 63; // success iff sequence number > read sequence number
   if (success) { std::memcpy(ret_data, &entry.data, sizeof(DataType)); } // conditional since DataType may be large, e.g., a whole network packet

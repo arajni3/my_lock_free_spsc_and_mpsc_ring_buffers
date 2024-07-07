@@ -37,11 +37,13 @@ bool RingBuf<DataType, length, version_granularity>::read(DataType* ret_data) {
   const unsigned version_idx = read_sequence_number & (version_granularity - 1);
   std::atomic<uint64_t>& version_number = version_numbers[version_idx].number;
 
-  // need acquire semantics to synchronize with the memcpy (do first then check)
   versioned_DataType entry;
+  // need store and load fences to synchronize check with the memcpy (do first then check; memcpy before store fence and check after load fence)
   do {
     std::memcpy(&entry, &buf[read_sequence_number & (length - 1)], sizeof(versioned_DataType));
-  } while (version_number.load(std::memory_order_acquire) & 1);
+    std::atomic_thread_fence(std::memory_order_release);
+    std::atomic_thread_fence(std::memory_order_acquire);
+  } while (version_number.load(std::memory_order_relaxed) & 1);
 
   unsigned char success = (uint64_t)(read_sequence_number - entry.sequence_number) >> 63; // success iff sequence number > read sequence number
   if (success) { std::memcpy(ret_data, &entry.data, sizeof(DataType)); } // conditional since DataType may be large, e.g., a whole network packet
