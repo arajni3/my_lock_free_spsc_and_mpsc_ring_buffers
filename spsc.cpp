@@ -38,13 +38,12 @@ bool RingBuf<DataType, length, version_granularity>::read(DataType* ret_data) {
   std::atomic<uint64_t>& version_number = version_numbers[version_idx].number;
 
   versioned_DataType entry;
-  /* need store and load fences to synchronize check with the memcpy (do first then check; memcpy before store fence and check after load fence); 
-  this is not equivalent to, and hence more efficient than, sequential consistency because unrelated instructions can still be committed in-between 
-  the acquire fence instruction and the version number load/branch check since the version number load has relaxed semantics
+  /* need full load fence to synchronize check with the memcpy (do first then check); this is not equivalent to, and hence more efficient than, 
+  sequential consistency because stores that happen after the fence can still be committed out of order regardless of the fence since the version 
+  number load has relaxed semantics
   */
   do {
     std::memcpy(&entry, &buf[read_sequence_number & (length - 1)], sizeof(versioned_DataType));
-    std::atomic_thread_fence(std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
   } while (version_number.load(std::memory_order_relaxed) & 1);
 
